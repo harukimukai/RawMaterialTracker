@@ -1,0 +1,123 @@
+--------------------------
+作業セット
+Job.cs（モデル）を作成。
+
+RawMaterialContext.cs に public DbSet<Job> Jobs { get; set; } を追加。
+
+dotnet ef migrations add AddJobTable → dotnet ef database update でDBに反映。
+
+JobService と JobsController を作成。
+
+Program.cs に AddScoped<JobService>() を追加。
+
+----------------------------
+
+
+
+1. EF Core が「あ、これ外部キーだわ」と判断する基準
+
+
+Entity Framework Core は、モデルの中にあるプロパティ名を見て、以下のパターンに当てはまると自動的に「紐付け（リレーション）」を作ります。
+
+・[クラス名] + Id （例：MaterialId）
+・Id （そのクラス自身の主キーと判断）
+・[プロパティ名] + Id
+
+MaterialId という名前は、まさにこの 「クラス名 + Id」 のパターンに完璧に一致しているので、EF Core は「よし、これは Material クラスの ID を指してるんだな」と勝手に理解して、データベースに Foreign Key（外部キー） を作成します。
+
+
+
+2. 三点セットで「魔法」が完成する
+より確実に、かつコードを書きやすくするために、以下の3つをセットで書くのが C# の「お作法」です。
+
+public int MaterialId { get; set; }
+
+DBに保存される実際の「数字（ID）」。
+
+public Material? Material { get; set; }
+
+「ナビゲーションプロパティ」。コード上で stock.Material.Name のように中身を覗くためのショートカット。
+
+public List<StockItem> StockItems { get; set; }
+
+親側（Material）に書く。これがあると「このアルミに紐づく板を全部出して」ができる。
+
+この3つが揃っていると、EF Core は迷うことなく「最強の親子関係」を構築してくれます。
+
+----- Sqlite ------
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+----
+dotnet add package Microsoft.EntityFrameworkCore.Design
+----
+dotnet ef database update
+
+
+---------------------------------
+お互いが相手を参照し合っている 「循環参照（Circular Reference）」
+ReferenceLoopHandling.Ignore がやったこと
+StockItem → Material までは書きくが、その先の Material → StockItem に戻ろうとした瞬間に「あ、これはさっき見たやつだ」と判断してストップをかける。その結果、綺麗なJSONとして出力されるようになった。
+
+
+手法	            現場の状況
+今回の方法 (Ignore)	とにかく早く動かしたい。
+                   自分一人で開発している。
+[JsonIgnore]	   規模が小さく、DTOを作るほど
+                   ではないが、特定のループだけ止めたい。
+DTO (推奨)	       チーム開発。長く保守するシ
+                   ステム。セキュリティが重要なアプリ。
+
+-------------------------------
+いつ useEffect を使うべき？
+useEffect は本来、**「Reactの外の世界」**と同期するために使うもの。
+
+使うべき時: APIからデータを取ってくる、タイマーを動かす、ブラウザのタイトルを変えるなど。
+
+使わないべき時: 「Aが変わったらBも変える」という、React内部のデータ同士の同期。
+
+[!TIP]
+「原因」のすぐそばで「結果」を出す
+「入力された（原因）」というイベントの中で「計算する（結果）」のが、最もバグが少なく、読みやすいコードになる。
+
+---------------------------
+テキストとアイコン（SVG）は、デフォルトだと「文字の下端」で揃えようとするが、アイコンは四角い枠の中に入っているため、文字より少し浮いて見えたり、逆に沈んで見えたりしてしまう。
+
+これを解決するには、<h1> 自体を Flexbox に変えて、alignItems: 'center' を指定するのが一番スマートで確実な方法。
+
+<h1 style={{ 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: '15px' // アイコンと文字の間の距離
+}}>
+    <Anvil size={40} />
+    <span>Raw Material Tracker</span>
+</h1>
+
+--------------------------
+useEffect の中で関数を 定義した直後 に、その関数を呼び出す必要があります。
+JavaScriptにおいて const name = async () => { ... } は、「こういう処理をいつかやってね」という予約（定義）に過ぎません。
+
+1. formData.materialId が変わる。
+2. useEffect が発動する。
+3. 「よし、fetchStockStatus という名前の処理セットをメモリ上に作ったぞ！」（ここで終わり）
+
+実行の指示がないため、中身（console.logなど）が一切動かない。
+
+もし「関数を定義して、そのすぐ下で呼び出す」という2ステップが面倒に感じるなら、以下のような書き方（即時実行関数）もよく使われます。
+useEffect(() => {
+    if (!formData.materialId) {
+        setStockSummary(null)
+        return
+    }
+
+    // 定義と実行を合体させる書き方
+    (async () => {
+        console.log("fetch started")
+        try {
+            const res = await api.get('/api/stockitems')
+            // ...処理...
+        } catch (err) {
+            // ...
+        }
+    })() // ← この最後のカッコが「今すぐ実行しろ」の合図
+}, [formData.materialId])

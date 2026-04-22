@@ -1,0 +1,4 @@
+Settings page
+--- On/Off ボタンで切替 ---
+    -- Addformなどでリストの内容が変化したと 
+       きにsetShowList()で表示するリストを変更する。
